@@ -37,22 +37,35 @@ class TestStore(unittest.TestCase):
         assert(hook_called)
 
     def test2(self):
-        store_name = 'test2'
+        store_name = 'test2first'
         store_path = f'{stores_dir}/test2'
         store_patt = r'^.*$'
+        store2_name = 'test2second'
+        store2_path = f'{stores_dir}/test2second'
+        store2_patt = r'^.*$'
+        data1, data2 = 'this is data 1', 'this is data 2'
         store.create(store_name, store_path, store_patt)
-        data1, data2 = 'fooobar', 'barfoo'
+        store.create(store2_name, store2_path, store2_patt)
+        try:
+            created1, created2 = store.get(store_name, store2_name)
+            assert(store_name  == created1.name)
+            assert(store_path  == str(created1.path))
+            assert(store_patt  == created1.pattern.pattern)
+            assert(store2_name == created2.name)
+            assert(store2_path == str(created2.path))
+            assert(store2_patt == created2.pattern.pattern)
 
-        store.add(store_name, data1)
-        store.add(store_name, data2)
-        entries = store.search(store_name, data1)
-        assert(entries[0] == data1)
-        to_remove = store.search(store_name, '.*bar.*foo')
-        store.remove(store_name, to_remove)
-        assert(data2 not in store.all(store_name))
-        store.remove(store_name, data1)
-        assert(data1 not in store.all(store_name))
-        store.delete(store_name)
+            store.add(store_name, data1)
+            store.add(store_name, data2)
+            entry1, entry2 = store.entries(store_name)
+            print(entry1,  data1)
+
+        except Exception as e:
+            store.delete(store_name, store2_name)
+            raise e
+        store.delete(store_name, store2_name)
+        assert(store._SL.read_text() == '')
+
 
 if __name__ == '__main__':
     unittest.main()
