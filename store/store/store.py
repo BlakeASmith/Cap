@@ -5,21 +5,41 @@ from createhook import hooks
 import re
 
 _SL = Path(__file__).parent / 'store_index.txt'
-SL_entry = lambda n, p, pat: f'{n} {p} {pat}'
 
-def SL_entry_pattern(name='^[a-zA-Z0-9]+', path=r'\S*', pattern='.*' ):
+def sl_entry(name, path, pattern):
+    """create the text for an entry in the stores list"""
+    return f'{name} {path} {pattern}'
+
+def sl_entry_pattern(name='^[a-zA-Z0-9]+', path=r'\S*', pattern='.*'):
+    """template for the regex pattern of an entry in the stores list based
+    on the given, name, path, or pattern
+    Args:
+        name (str): the pattern of the name, will be placed in a capture group called 'name'
+        name (str): the pattern of the path, will be placed in a capture group called 'path'
+        pattern (str): the pattern of the regex pattern of the associated store,
+            will be placed in a capture group called 'pattern'
+
+    Returns:
+        a `re.RegexObject` of the created  pattern
+    """
     return re.compile((
-            r'^\s*(?P<name>{})\s+'
-            r'(?P<path>{})\s\s*'
-            r'(?P<pattern>{})\s*$'
+        r'^\s*(?P<name>{})\s+'
+        r'(?P<path>{})\s\s*'
+        r'(?P<pattern>{})\s*$'
     ).format(name, path, pattern), re.MULTILINE)
 
 
-head = lambda name, pattern: f"""
-Name:          {name}
-Pattern:       {pattern}
+def head(name, pattern): 
+    """Template for the beginning entry in a store file
+    Args
+        name (str): the name of the store
+        pattern (str) the regex pattern for the store"""
+    return f"""
+    Name:          {name}
+    Pattern:       {pattern}
 
-"""
+    """
+
 
 def list_all():
     """lists all the stores
@@ -33,12 +53,13 @@ def list_all():
                     entries in the store
             }
      """
-    matches = SL_entry_pattern().finditer(_SL.read_text())
-    if matches is None: return None
+    matches = sl_entry_pattern().finditer(_SL.read_text())
+    if not matches:
+        return None
     stores = [SimpleNamespace(**m.groupdict()) for m in matches]
     for store in stores:
         store.pattern = re.compile(store.pattern, re.MULTILINE)
-        store.path    = Path(store.path)
+        store.path = Path(store.path)
     return stores
 
 
@@ -62,8 +83,7 @@ def get(*names):
     Raises:
         ValueError: if stores do not exist for any of the given names
     """
-
-    stores_by_name = {store.name:store for store in list_all()}
+    stores_by_name = {store.name: store for store in list_all()}
 
     for name in names:
         if name not in stores_by_name:
@@ -72,7 +92,7 @@ def get(*names):
     return [store for name, store in stores_by_name.items() if name in names]
 
 
-def entries(*store_names, groups=False, include_store_found=False):
+def get_entries(*store_names, groups=False):
     """get all entries from a store
 
     Args:
@@ -92,12 +112,15 @@ def entries(*store_names, groups=False, include_store_found=False):
     """
     entries = {}
     for store in get(*store_names):
-        text = store.path.read_text().replace(head(store.name, store.pattern.pattern), '')
+        text = store.path.read_text().replace(
+            head(store.name, store.pattern.pattern), '')
         matching = [(m.group(0), m.groupdict()) if groups else m.group(0)
-                for m in store.pattern.finditer(text) if m.group(0) != '']
+                    for m in store.pattern.finditer(text) if m.group(0) != '']
         entries[store.name] = matching
-    if len(store_names) == 1: return entries[store_names[0]]
-    else: return entries
+    if len(store_names) == 1:
+        return entries[store_names[0]]
+    else:
+        return entries
 
 
 @hooks.before
@@ -114,9 +137,10 @@ def create(name, path, pattern):
     """
     # create an entry in the get list
     with _SL.open(mode='a') as get:
-        print(SL_entry(name, path, pattern), file=get)
+        print(sl_entry(name, path, pattern), file=get)
     # create a new store
     Path(path).write_text(head(name, pattern))
+
 
 @hooks.before
 @hooks.after
@@ -132,19 +156,23 @@ def delete(name, *store_names):
     """
     store_names = (name,) + store_names
     for store_name in store_names:
-        def raise_error():
+        def raise_error(store_name=store_name):
+
             raise ValueError(
-            f'''there is no store with name: {store_name}
+                f'''there is no store with name: {store_name}
                 {list_all()}
             ''')
-        store_pattern = SL_entry_pattern(name=store_name)
+        store_pattern = sl_entry_pattern(name=store_name)
         get_text = _SL.read_text()
         match = store_pattern.search(get_text)
         store = match.groupdict() if match is not None else raise_error()
-        try:Path(store['path']).unlink()
-        except FileNotFoundError:raise_error()
-        finally: _SL.write_text(get_text[:match.start(0)]
-                + get_text[match.end(0):])
+        try:
+            Path(store['path']).unlink()
+        except FileNotFoundError:
+            raise_error()
+        finally:
+            _SL.write_text(get_text[:match.start(0)]
+                           + get_text[match.end(0):])
 
 
 def check(store_name, *entries):
@@ -163,7 +191,8 @@ def check(store_name, *entries):
     store = get(store_name)[0]
     for entry in entries:
         match = store.pattern.match(entry)
-        if match is None: raise ValueError(f"""
+        if match is None:
+            raise ValueError(f"""
         {entry}
         does not match pattern {store.pattern} of store {store_name}
         """)
@@ -188,6 +217,7 @@ def add(store_name, *entries):
         for entry in entries:
             print(entry, file=st)
 
+
 def __remove(store_name, *entries):
     store = check(store_name, *entries)
     text = store.path.read_text()
@@ -196,13 +226,14 @@ def __remove(store_name, *entries):
         match = store.pattern.search(entry)
         if match is None:
             raise ValueError(f"""
-            {data}
+            {entry}
             the given entry is not present in store {store_name}
             """)
         start, end = match.span(0)
         store.path.write_text(text[:start] + text[end:])
-        locations.append((start,end))
+        locations.append((start, end))
     return locations
+
 
 @hooks.before
 @hooks.after
@@ -225,22 +256,38 @@ def remove(store_name, *entries):
 
 @hooks.before
 @hooks.after
-def replace(store_name, *entries):
-    store = check(store_name, *entries)
-    locations = __remove(store_name, *entries)
-    for start, _ in locations:
+def replace(store_name, entry, replacement):
+    """replace an entry in a store
+
+    Args:
+        store_name (str): the store with entries to be replaced
+        entry (str): the entry to be replaced
+        new_entry (str): the replacement
+
+    Raises:
+        ValueError: when the given store does not exist or
+            the given entry is not a valid entry for the store
+    """
+    store = check(store_name, *entry)
+    locations = __remove(store_name, *entry)
+    for (start, _), entry in zip(locations, replacement):
         text = store.path.read_text()
-        store.path.write_text(text[:start] + data + text[start:])
+        store.path.write_text(text[:start] + entry + text[start:])
 
 
 @hooks.before
 @hooks.after
 def search(*store_names, pattern):
-    matches_by_store = {name: [match for match in st_entries if re.match(pattern, match, re.MULTILINE)]
-            for name, st_entries in entries(*store_names).items()}
-    if len(store_names) == 1: return matches_by_store[store_names[0]]
-    else: return matches_by_store
+    """search a store for entries matching a regex pattern
 
+    Args:
+        *store_names (str): The stores to be searched
+        *pattern (str): the regex pattern to match
+    """
+    matches_by_store = {name:[entry for entry in entries if re.match(pattern, entry, re.MULTILINE)]
+                        for name, entries in get_entries(*store_names).items()}
 
-
-
+    if len(store_names) == 1:
+        return matches_by_store[store_names[0]]
+    else:
+        return matches_by_store
