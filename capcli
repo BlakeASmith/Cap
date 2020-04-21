@@ -1,0 +1,59 @@
+#!/bin/python
+from argparse import ArgumentParser
+from cap import listset
+from cap import textobjecttypes
+
+# 1. add to, remove from, and update collections
+# 2. create new collections and delete entire collections
+# 3. hook into events of collections
+# capcli {list} {operation} {file}
+
+parse = ArgumentParser()
+subparse = parse.add_subparsers(dest='subparser')
+create = subparse.add_parser('create', help='create a new collection')
+create.add_argument('name', help='the name of the new collection')
+create.add_argument(
+        'type', 
+        help='the text object which will be stored in the collection',
+        choices=list(textobjecttypes))
+
+delete = subparse.add_parser('delete', help='delete a collection')
+delete.add_argument('name', help='the name of the collection to delete', choices=list(listset.by_name()))
+
+subparsers = [subparse.add_parser(name, help=f'operate on {name}') for name in listset.by_name()]
+
+for coll in subparsers:
+    coll.add_argument('operation', choices=['add', 'remove'], help='what to do with the collection')
+    coll.add_argument(
+            '-f', 
+            '--filename', 
+            default='-', 
+            help='file containing the text objects, defaults to stdin')
+
+args = parse.parse_args()
+
+def create(args):
+    listset.add(args.name, args.type)
+    print(f'created collection {args.name} containing {args.type}(s)')
+
+def delete(args):
+    listset.remove(args.name)
+    print(f'deleted {args.name}')
+
+def add(collection, args):
+    print('add')
+
+def remove(collection, args):
+    print('remove')
+
+def collection(args):
+    return {
+            'add':add,
+            'remove':remove
+    }[args.operation](listset[args.subparser], args)
+
+{
+        'create': create,
+        'delete': delete,
+}.get(args.subparser, collection)(args)
+

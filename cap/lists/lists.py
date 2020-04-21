@@ -39,6 +39,9 @@ class ListSet:
     
     def __iter__(self):
         return iter(self.index)
+
+    def by_name(self):
+        return self.index.files_by_name()
     
     def __contains__(self, item):
         return item in self.index
